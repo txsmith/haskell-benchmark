@@ -65,6 +65,7 @@ chopSpecialized 7 final w = do
 chopSpecialized 8 final w = poke (castPtr final) w
 chopSpecialized _ _ _ = error "Cannot get more than 8 bytes out of a Word64"
 
+chopFour _ final w = poke (castPtr final) (asWord32 w)
 
 main :: IO ()
 main = defaultMain [
@@ -80,7 +81,10 @@ main = defaultMain [
           whnfIO $ chopLogLoop n finalBuf words),
       env environment (\ ~(n, words, finalBuf) ->
         bench "With unrolled loop and shiftR" $
-          whnfIO $ chopSpecialized n finalBuf words)
+          whnfIO $ chopSpecialized n finalBuf words),
+      env environment (\ ~(n, words, finalBuf) ->
+        bench "Into 4 bytes" $
+          whnfIO $ chopFour n finalBuf words)
     ]
   ]
 
