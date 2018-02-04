@@ -26,11 +26,23 @@ chopWithTemp !n !final !w = do
   poke tempBuf w
   copyBytes final (castPtr tempBuf) n
 
-chopByAnding :: Int -> Ptr Word8 -> Word64 -> IO ()
-chopByAnding 0 _ _ = pure ()
-chopByAnding n final w = do
+chopLoop :: Int -> Ptr Word8 -> Word64 -> IO ()
+chopLoop 0 _ _ = pure ()
+chopLoop n final w = do
   poke final (asWord8 w)
-  chopByAnding (n-1) final (shiftR w 8)
+  chopLoop (n-1) final (shiftR w 8)
+
+chopLogLoop :: Int -> Ptr Word8 -> Word64 -> IO ()
+chopLogLoop n final w
+  | n <= 0 = pure ()
+  | n == 1 = poke final (asWord8 w)
+  | n == 2 = poke (castPtr final) (asWord16 w)
+  | n == 4 = poke (castPtr final) (asWord32 w)
+  | n == 8 = poke (castPtr final) w
+  | n > 4  = chopLogLoop 4 final w >>
+             chopLogLoop (n-4) final (shiftR w (8*n))
+  | n > 2 = chopLogLoop 2 final w >>
+            chopLogLoop (n-2) final (shiftR w (8*n))
 
 chopSpecialized :: Int -> Ptr Word8 -> Word64 -> IO ()
 chopSpecialized 0 _ _     = pure ()
@@ -61,10 +73,13 @@ main = defaultMain [
         bench "With a temp buffer" $
           nfIO $ chopWithTemp n finalBuf words),
       env environment (\ ~(n, words, finalBuf) ->
-        bench "With loop and shiftR" $
-          whnfIO $ chopByAnding n finalBuf words),
+        bench "With linear loop and shiftR" $
+          whnfIO $ chopLoop n finalBuf words),
       env environment (\ ~(n, words, finalBuf) ->
-        bench "With specialized function" $
+        bench "With logaritmic loop and shiftR" $
+          whnfIO $ chopLogLoop n finalBuf words),
+      env environment (\ ~(n, words, finalBuf) ->
+        bench "With unrolled loop and shiftR" $
           whnfIO $ chopSpecialized n finalBuf words)
     ]
   ]
